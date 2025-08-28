@@ -19,7 +19,8 @@ jobs:
       - name: Clone KernelSU
         run: |
           KSU_DIR=$GITHUB_WORKSPACE/drivers/kernelsu
-          if [ -d "$KSU_DIR" ]; then
+          # Remove anything at that path, whether file or dir
+          if [ -e "$KSU_DIR" ]; then
             echo "drivers/kernelsu already exists, removing..."
             rm -rf "$KSU_DIR"
           fi
