@@ -1,0 +1,86 @@
+name: Build OnePlus SM8250 Kernel (Lineage/KernelSU)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-latest
+    env:
+      KERNEL_DIR: ${{ github.workspace }}
+      OUT_DIR: ${{ github.workspace }}/out
+      DIST_DIR: ${{ github.workspace }}/dist
+      BUILD_CONFIG: build.config.aarch64
+      KERNEL_BINARY: Image
+      BUILD_BOOT_IMG: "1"
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install packages
+        run: |
+          sudo apt update -y
+          sudo apt install -y bc bison build-essential ccache flex libncurses-dev libssl-dev libelf-dev python3 python3-pip wget zip unzip
+
+      - name: Download Android NDK (r25b)
+        run: |
+          mkdir -p ${HOME}/ndk
+          cd ${HOME}/ndk
+          # You can replace this with a different NDK if you prefer
+          wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O ndk.zip
+          unzip -q ndk.zip
+          # set NDK path
+          echo "NDK_PATH=${HOME}/ndk/android-ndk-r25b" >> $GITHUB_ENV
+
+      - name: Add toolchains to PATH
+        run: |
+          echo "${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+
+      - name: Configure env vars for cross compile
+        run: |
+          export PATH="${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          # Set CC to clang; kernel scripts will pick it up if CC=clang
+          echo "CC=clang" >> $GITHUB_ENV
+          # Ensure out/dist directories exist
+          mkdir -p $OUT_DIR $DIST_DIR
+
+      - name: Show selected build config
+        run: |
+          echo "Using BUILD_CONFIG=${{ env.BUILD_CONFIG }}"
+          ls -la
+
+      - name: Run kernel build script
+        run: |
+          set -euo pipefail
+          cd $KERNEL_DIR
+          # Some build.sh expect these envs — export them for the script
+          export OUT_DIR=$OUT_DIR
+          export DIST_DIR=$DIST_DIR
+          export BUILD_CONFIG=$BUILD_CONFIG
+          export KERNEL_BINARY=$KERNEL_BINARY
+          export BUILD_BOOT_IMG=$BUILD_BOOT_IMG
+          export CC=clang
+          # Optional: increase parallel jobs if runner supports it
+          JOBS=$(nproc || echo 2)
+          echo "Starting build with $JOBS jobs..."
+          bash -x build/build.sh || ( echo "Build failed; printing last 200 lines of make.log if present" && tail -n 200 $OUT_DIR/*.log || true ; exit 1 )
+
+      - name: List dist artifacts
+        run: |
+          echo "Dist dir:"
+          ls -la $DIST_DIR || true
+          echo "Out dir:"
+          ls -la $OUT_DIR || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-dist
+          path: |
+            $DIST_DIR/**
+            $OUT_DIR/**
+
