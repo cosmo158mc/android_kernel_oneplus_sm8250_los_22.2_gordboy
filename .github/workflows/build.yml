@@ -19,6 +19,10 @@ jobs:
       - name: Clone KernelSU
         run: |
           cd $GITHUB_WORKSPACE
+          if [ -d drivers/kernelsu ]; then
+            echo "drivers/kernelsu already exists, removing..."
+            rm -rf drivers/kernelsu
+          fi
           git clone --depth=1 https://github.com/tiann/KernelSU drivers/kernelsu
 
       - name: Install build deps
