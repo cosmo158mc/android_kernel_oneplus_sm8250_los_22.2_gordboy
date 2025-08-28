@@ -1,4 +1,4 @@
-name: Build OnePlus 9R Kernel
+name: Build OnePlus 9R Kernel with KSU
 
 on:
   workflow_dispatch:
@@ -16,6 +16,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Clone KernelSU
+        run: |
+          cd $GITHUB_WORKSPACE
+          git clone --depth=1 https://github.com/tiann/KernelSU drivers/kernelsu
+
       - name: Install build deps
         run: |
           sudo apt update -y
@@ -31,7 +36,14 @@ jobs:
           echo "NDK=$HOME/ndk/android-ndk-r25b" >> $GITHUB_ENV
           echo "$HOME/ndk/android-ndk-r25b/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
 
-      - name: Build kernel with make
+      - name: Enable KSU in defconfig
+        run: |
+          DEFCONFIG=$GITHUB_WORKSPACE/arch/arm64/configs/defconfig
+          if ! grep -q "CONFIG_KSU=y" "$DEFCONFIG"; then
+            echo "CONFIG_KSU=y" >> "$DEFCONFIG"
+          fi
+
+      - name: Build kernel
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
@@ -40,13 +52,9 @@ jobs:
 
           mkdir -p out
 
-          # use the provided defconfig
           make O=out defconfig
-
-          # compile kernel image
           make -j$(nproc) O=out
 
-          # copy kernel image into dist
           mkdir -p dist
           cp out/arch/arm64/boot/Image* dist/ || true
           cp out/arch/arm64/boot/dtbo.img dist/ || true
