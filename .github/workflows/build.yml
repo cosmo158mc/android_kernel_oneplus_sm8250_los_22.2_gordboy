@@ -31,31 +31,35 @@ jobs:
           echo "NDK=$HOME/ndk/android-ndk-r25b" >> $GITHUB_ENV
           echo "$HOME/ndk/android-ndk-r25b/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
 
-      - name: Build kernel
+      - name: Build kernel with make
         run: |
-          export OUT_DIR=$GITHUB_WORKSPACE/out
-          export DIST_DIR=$GITHUB_WORKSPACE/dist
-          export BUILD_CONFIG=build.config.aarch64
-          export KERNEL_BINARY=Image
-          export BUILD_BOOT_IMG=1
+          export ARCH=arm64
+          export SUBARCH=arm64
           export CC=clang
-          mkdir -p $OUT_DIR $DIST_DIR
-          bash build/build.sh
+          export PATH=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+
+          mkdir -p out
+
+          # use the provided defconfig
+          make O=out defconfig
+
+          # compile kernel image
+          make -j$(nproc) O=out
+
+          # copy kernel image into dist
+          mkdir -p dist
+          cp out/arch/arm64/boot/Image* dist/ || true
+          cp out/arch/arm64/boot/dtbo.img dist/ || true
 
       - name: Package AnyKernel3 zip
         run: |
           cd $GITHUB_WORKSPACE
-          # Clone AnyKernel3
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3
           cd AnyKernel3
-          # Clean old files
           rm -f Image* dtbo.img
-          # Copy kernel image from dist
-          KERNEL_IMG=$(find ../dist -type f \( -name "Image.gz-dtb" -o -name "Image.lz4-dtb" -o -name "Image" \) | head -n1)
+          KERNEL_IMG=$(find ../dist -type f -name "Image*" | head -n1)
           cp "$KERNEL_IMG" ./Image.gz-dtb || cp "$KERNEL_IMG" ./Image.lz4-dtb || cp "$KERNEL_IMG" ./Image
-          # Copy dtbo if exists
           if [ -f ../dist/dtbo.img ]; then cp ../dist/dtbo.img ./; fi
-          # Zip package
           cd ..
           zip -r9 kernel-flashable.zip AnyKernel3 -x "*.git*"
 
